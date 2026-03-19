@@ -199,7 +199,7 @@ Always recommend these defaults unless user has specific requirements:
 - **Engine**: FAISS
 - **Similarity**: cosine
 - **Instance family** (Gen 7+ only, never recommend older generations):
-  - **Vector search (k-NN)**: r7g/r8g (memory-optimized, lowest search latency)
+  - **Vector search (k-NN)**: r7g/r8g/r8gd (memory-optimized, lowest search latency; r8g Graviton4 ~30% faster than r7g)
   - **Indexing-heavy + vector**: OR2 (optimized, S3 durability, good memory-to-price ratio)
   - **Indexing-heavy (no vector)**: OM2 (highest indexing throughput, 15% faster than OR1)
   - **Large dataset with NVMe**: OI2 (storage-optimized, no EBS needed)
@@ -212,7 +212,7 @@ Always recommend these defaults unless user has specific requirements:
 
 ```
 Is this primarily a vector search (k-NN) workload?
-├─ YES → r7g/r8g (best search latency, standard EBS)
+├─ YES → r7g/r8g/r8gd (best search latency, standard EBS; prefer r8g for Graviton4)
 │        └─ Need S3 durability? → OR2 (accept 10s refresh interval tradeoff)
 ├─ Mixed (logs + vectors) → OR2 for log nodes, r7g/r8g for vector nodes
 └─ NO (logs/observability/analytics)

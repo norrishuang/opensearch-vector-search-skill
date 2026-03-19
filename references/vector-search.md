@@ -11,7 +11,7 @@ OpenSearch supports two vector index modes:
 **Recommended Configuration**:
 - **Vector Engine**: FAISS (recommended, better performance)
 - **Similarity Algorithm**: cosine (recommended, broader applicability)
-- **Instance Type**: Series 7 and above (r7g/r8g/c7g/m7g/or2/om2)
+- **Instance Type**: Series 7 and above (r7g/r8g/c7g/c8g/m7g/m8g/r8gd/or2/om2)
 
 <!-- FALLBACK: opensearch, priority=1 -->
 <!-- FALLBACK: aws-pricing, priority=2, condition="cost-related" -->

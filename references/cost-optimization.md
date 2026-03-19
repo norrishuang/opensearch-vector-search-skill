@@ -16,7 +16,7 @@ The cost of OpenSearch vector search mainly consists of three components: comput
 **Latest Recommended Configuration (December 2024)**:
 - **Vector Engine**: Primarily FAISS (replacing nmslib)
 - **Similarity Algorithm**: Primarily cosine (replacing l2)
-- **Instance Types**: Recommended series 7 and above (r7g/r8g/or2/om2)
+- **Instance Types**: Recommended series 7 and above (r7g/r8g/c7g/c8g/m7g/m8g/r8gd/or2/om2)
 
 <!-- FALLBACK: aws-pricing, priority=1, condition="cost-related" -->
 
@@ -209,7 +209,7 @@ Example:
 | Disk mode | 5×r8g.xlarge | 16x | 95 | 95ms | 0.92+ | $1,540 |
 | Disk mode | 5×r8g.xlarge | 32x | 73 | 114ms | 0.90+ | $1,540 |
 
-**Note**: All tests used the FAISS engine and cosine similarity algorithm. Series 7 and above instances (r7g/r8g/or2/om2) are recommended for the best price-performance ratio.
+**Note**: All tests used the FAISS engine and cosine similarity algorithm. Series 7 and above instances (r7g/r8g/c8g/m8g/or2/om2) are recommended for the best price-performance ratio.
 
 **Cost Savings**: 68-69% (disk mode vs in-memory mode)
 
@@ -567,11 +567,12 @@ Need maximum cost optimization?
 
 ### 3. Instance Type Selection Strategy
 
-#### Memory-Optimized Instances (r7g/r8g Series) - Recommended
+#### Memory-Optimized Instances (r7g/r8g/r8gd Series) - Recommended
 
 **Characteristics**:
-- High memory capacity, based on AWS Graviton processors
+- High memory capacity, based on AWS Graviton processors (Graviton3 for r7g, Graviton4 for r8g/r8gd)
 - Suitable for in-memory mode vector search
+- r8g provides up to 30% better performance over r7g
 - Series 7 and above provide the best price-performance ratio
 
 **Recommended Scenarios**:
