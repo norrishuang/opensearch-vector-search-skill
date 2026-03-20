@@ -1,5 +1,7 @@
 ---
 name: opensearch-vector-search
+version: 1.3.2
+repository: https://github.com/norrishuang/opensearch-vector-search-skill
 description: |
   Amazon OpenSearch vector search expert knowledge base. Comprehensive guidance on vector search configuration, cluster tuning, quantization, cost optimization, instance sizing, and pricing estimation.
 
@@ -14,8 +16,6 @@ description: |
   (8) User asks about OpenSearch cluster JVM, memory, or thread pool configuration
   (9) Involves Amazon OpenSearch Service pricing, cost calculation, or instance comparison
   (10) User provides an OpenSearch cluster URL/credentials and wants vector configuration analysis or health check
-version: 1.3.0
-repository: https://github.com/norrishuang/opensearch-vector-search-skill
 requirements:
   env:
     - name: AWS_ACCESS_KEY_ID
