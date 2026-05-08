@@ -1,6 +1,8 @@
 # OpenSearch Vector Search Expert
 
-An [OpenClaw](https://openclaw.ai) AgentSkill for Amazon OpenSearch vector search (k-NN). Provides comprehensive guidance on configuration, cluster tuning, quantization, cost optimization, instance sizing, and **live cluster analysis**.
+An AI agent skill for Amazon OpenSearch vector search (k-NN). Provides comprehensive guidance on configuration, cluster tuning, quantization, cost optimization, instance sizing, and **live cluster analysis**.
+
+Supports **[OpenClaw](https://openclaw.ai)** and **[Kiro](https://kiro.dev)**.
 
 ## Features
 
@@ -14,15 +16,75 @@ An [OpenClaw](https://openclaw.ai) AgentSkill for Amazon OpenSearch vector searc
 
 ## Install
 
+### OpenClaw
+
+One-line install via [clawhub](https://clawhub.ai):
+
 ```bash
 npx clawhub@latest install opensearch-vector-search
 ```
 
-Or manually copy to your OpenClaw skills directory:
+Or manually:
 
 ```bash
 cp -r . ~/.openclaw/skills/opensearch-vector-search/
 ```
+
+The skill is automatically discovered by OpenClaw and activated when relevant questions are asked.
+
+### Kiro
+
+Kiro supports this skill in two ways:
+
+#### Option 1 — Project Steering File (Recommended)
+
+Use as a global steering document for any project that involves OpenSearch. The skill content will be available to Kiro in every chat within that workspace.
+
+```bash
+# Clone or download this repo, then copy into your project
+mkdir -p <your-project>/.kiro/steering
+cp SKILL.md <your-project>/.kiro/steering/opensearch-vector-search.md
+cp -r references <your-project>/.kiro/steering/opensearch-references
+cp -r scripts <your-project>/scripts   # optional: for live cluster analysis
+```
+
+Then edit the first line of `.kiro/steering/opensearch-vector-search.md` to update the `references/` path (they are now under `.kiro/steering/opensearch-references/`), or add a frontmatter header to control when the steering is included:
+
+```markdown
+---
+inclusion: always
+---
+```
+
+> **Note:** Kiro steering files without a frontmatter block are always included. You can also use `inclusion: fileMatch` with `fileMatchPattern` to limit activation to specific files.
+
+#### Option 2 — Agent Skill Resource
+
+Use as a named skill attached to a specific Kiro agent (defined in `.kiro/agents/<agent>.json`):
+
+```bash
+# Copy skill into the .kiro/skills directory of your project
+mkdir -p <your-project>/.kiro/skills/opensearch-vector-search
+cp SKILL.md <your-project>/.kiro/skills/opensearch-vector-search/SKILL.md
+cp -r references <your-project>/.kiro/skills/opensearch-vector-search/references
+cp -r scripts <your-project>/.kiro/skills/opensearch-vector-search/scripts
+```
+
+Then reference it in your agent JSON (`.kiro/agents/<agent>.json`):
+
+```json
+{
+  "name": "my-opensearch-agent",
+  "description": "Agent with OpenSearch vector search expertise",
+  "prompt": "You are an OpenSearch expert. Use the opensearch-vector-search skill for guidance.",
+  "tools": ["fs_read", "shell"],
+  "resources": [
+    "skill://.kiro/skills/opensearch-vector-search/SKILL.md"
+  ]
+}
+```
+
+> **Tip:** Option 1 (Steering) is simpler and works for general questions in any Kiro chat. Option 2 (Agent Skill) is better when you want the knowledge scoped to a specific agent.
 
 ## Project Structure
 
