@@ -36,27 +36,39 @@ The skill is automatically discovered by OpenClaw and activated when relevant qu
 
 Kiro supports this skill in two ways:
 
-#### Option 1 — Project Steering File (Recommended)
+#### Option 1 — Global Steering (Recommended)
 
-Use as a global steering document for any project that involves OpenSearch. The skill content will be available to Kiro in every chat within that workspace.
+Install once into `~/.kiro/steering/` and the skill applies to **all projects** automatically — no per-project setup needed.
 
 ```bash
-# Clone or download this repo, then copy into your project
-mkdir -p <your-project>/.kiro/steering
-cp SKILL.md <your-project>/.kiro/steering/opensearch-vector-search.md
-cp -r references <your-project>/.kiro/steering/opensearch-references
-cp -r scripts <your-project>/scripts   # optional: for live cluster analysis
+# Clone this repo, then copy into Kiro's global steering directory
+git clone https://github.com/norrishuang/opensearch-vector-search-skill.git
+cd opensearch-vector-search-skill
+
+mkdir -p ~/.kiro/steering
+cp SKILL.md ~/.kiro/steering/opensearch-vector-search.md
+cp -r references ~/.kiro/steering/opensearch-references
 ```
 
-Then edit the first line of `.kiro/steering/opensearch-vector-search.md` to update the `references/` path (they are now under `.kiro/steering/opensearch-references/`), or add a frontmatter header to control when the steering is included:
+That's it. Next time you ask Kiro anything about OpenSearch vector search, this skill will be in context.
 
-```markdown
----
-inclusion: always
----
+> **Note:** `~/.kiro/steering/` is Kiro's global steering directory — files here apply to every workspace. Steering files without a frontmatter block are always included. You can add a frontmatter header to control activation:
+> ```markdown
+> ---
+> inclusion: always
+> ---
+> ```
+
+#### Option 1b — Project-scoped Steering
+
+If you only want the skill active for a specific project:
+
+```bash
+cd /path/to/your-project
+mkdir -p .kiro/steering
+cp /path/to/opensearch-vector-search-skill/SKILL.md .kiro/steering/opensearch-vector-search.md
+cp -r /path/to/opensearch-vector-search-skill/references .kiro/steering/opensearch-references
 ```
-
-> **Note:** Kiro steering files without a frontmatter block are always included. You can also use `inclusion: fileMatch` with `fileMatchPattern` to limit activation to specific files.
 
 #### Option 2 — Agent Skill Resource
 
