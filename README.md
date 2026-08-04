@@ -12,6 +12,7 @@ Supports **[OpenClaw](https://openclaw.ai)** and **[Kiro](https://kiro.dev)**.
 - **Cost Estimation** — Real-time AWS pricing via Pricing API, monthly cost projections
 - **Cluster Tuning** — JVM, thread pools, shard strategies, node roles
 - **Performance Benchmarks** — QPS/latency/recall data for various configurations
+- **VectorDBBench Runner Skill** — Reproducible benchmark planning for managed domains, Serverless, on-disk, quantization, and the OpenSearch s3vector engine
 - **Live Cluster Analyzer** 🆕 — Connect to any OpenSearch cluster, auto-discover k-NN indices, analyze vector configs, and generate optimization recommendations (read-only)
 
 ## Install
@@ -114,7 +115,32 @@ Then reference it in your agent JSON (`.kiro/agents/<agent>.json`):
 ├── scripts/
 │   ├── get_opensearch_pricing.py         # AWS Pricing API query tool
 │   └── analyze_cluster.py               # Live cluster analyzer (read-only)
+└── opensearch-vector-benchmark/
+    ├── SKILL.md                          # VectorDBBench workflow and safety guardrails
+    ├── references/                       # Scenario, runbook, and result-analysis guidance
+    └── scripts/
+        └── generate_benchmark_plan.py    # Dry-run/run command generator
 ```
+
+## VectorDBBench Skill
+
+The bundled `opensearch-vector-benchmark` skill guides agents through controlled OpenSearch
+vector benchmarks with [VectorDBBench](https://github.com/zilliztech/VectorDBBench). It separates
+managed domains, OpenSearch Serverless, and the OpenSearch `s3vector` engine; captures experiment
+context; and explains on-disk oversampling and page-cache effects.
+
+Generate a safe dry-run plan:
+
+```bash
+python3 opensearch-vector-benchmark/scripts/generate_benchmark_plan.py \
+  --deployment managed \
+  --host search-example.us-east-1.es.amazonaws.com \
+  --case-type Performance768D1M \
+  --db-label baseline
+```
+
+The managed-domain baseline uses `NUM_PER_BATCH=20000` and 40 indexing clients. Serverless starts
+with one indexing client. The script only generates commands and never connects to a cluster.
 
 ## Live Cluster Analyzer
 

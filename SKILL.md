@@ -1,6 +1,6 @@
 ---
 name: opensearch-vector-search
-version: 1.3.2
+version: 1.4.0
 repository: https://github.com/norrishuang/opensearch-vector-search-skill
 description: |
   Amazon OpenSearch vector search expert knowledge base. Comprehensive guidance on vector search configuration, cluster tuning, quantization, cost optimization, instance sizing, and pricing estimation.
@@ -16,6 +16,7 @@ description: |
   (8) User asks about OpenSearch cluster JVM, memory, or thread pool configuration
   (9) Involves Amazon OpenSearch Service pricing, cost calculation, or instance comparison
   (10) User provides an OpenSearch cluster URL/credentials and wants vector configuration analysis or health check
+  (11) For executing reproducible VectorDBBench performance tests, route to the bundled opensearch-vector-benchmark skill
 requirements:
   env:
     - name: AWS_ACCESS_KEY_ID
@@ -40,6 +41,7 @@ requirements:
 - **Pricing script** (`scripts/get_opensearch_pricing.py`): Makes outbound HTTPS requests to the AWS Pricing API (`pricing.us-east-1.amazonaws.com`). Requires `boto3` and valid AWS credentials. The script is **read-only** (fetches public pricing data) and does not modify any AWS resources. Only run it when the user explicitly requests cost estimation.
 - **Reference examples**: Code snippets in `references/` contain example API calls to `localhost:9200` (standard OpenSearch endpoint). These are **documentation examples only** — do NOT execute them automatically. Present them to the user as configuration references.
 - **Cluster analyzer** (`scripts/analyze_cluster.py`): Connects to a user-provided OpenSearch cluster and performs **read-only** analysis. It NEVER creates, modifies, or deletes any indices or data. Only run it when the user explicitly provides cluster credentials (URL + username/password).
+- **Vector benchmark skill** (`opensearch-vector-benchmark/SKILL.md`): VectorDBBench creates, loads, force-merges, and may drop benchmark indices. Use only with a dedicated benchmark target and explicit user confirmation.
 
 ## Knowledge Base Structure
 
@@ -56,6 +58,7 @@ Read the corresponding reference file based on the question type:
 | Query optimization | `references/query-optimization.md` | query, filter, aggregation, cache, pagination |
 | Optimized instances (OR1/OR2/OM2/OI2) | `references/optimized-instances.md` | optimized, OR1, OR2, OM2, OI2, S3 durability, indexing throughput |
 | Live cluster analysis | `scripts/analyze_cluster.py` | analyze cluster, connect, diagnose, review config, health check |
+| Execute a vector benchmark | `opensearch-vector-benchmark/SKILL.md` | VectorDBBench, benchmark, QPS, latency, recall, indexing throughput |
 
 ## Core Workflows
 
