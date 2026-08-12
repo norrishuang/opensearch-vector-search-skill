@@ -93,8 +93,10 @@ FAISS, `m=16`, `ef_construction=200`, `ef_search=100`, no replicas, one segment,
 The generator emits a dry-run command by default. After inspecting it, regenerate with
 `--phase run`. Use `--format json` when another agent or automation will consume the plan.
 
-For on-disk mode, always set `--oversample-factor` explicitly. Start with 20 for a
-recall-oriented baseline, then sweep lower values such as 1, 2, 5, and 10 to measure the
+For the managed on-disk 32x scenario on OpenSearch 3.6+, treat the field as 1-bit
+SQ, not the CLI's separate in-memory BQ candidate. Prefer OpenSearch 3.7+ for the
+SQ rescoring prefetch path. Start with `ef_search=200` and
+`oversample_factor=2`, then sweep `ef_search` and oversampling to measure the
 recall/QPS/IOPS tradeoff:
 
 ```bash
@@ -102,10 +104,16 @@ python3 scripts/generate_benchmark_plan.py \
   --deployment managed \
   --host search-example.us-east-1.es.amazonaws.com \
   --case-type Performance768D10M \
-  --db-label ondisk-32x-os20 \
+  --db-label ondisk-32x-sq-os2 \
   --on-disk \
-  --oversample-factor 20
+  --ef-search 200 \
+  --oversample-factor 2
 ```
+
+This starting point comes from a warm-cache 100M x 768d OpenSearch 3.7 test. Also
+test `ef_search=800, oversample_factor=2` when recall is the priority. Do not
+carry either result to another version, dataset, shard topology, or storage
+configuration without remeasurement.
 
 ### 5. Execute in controlled phases
 

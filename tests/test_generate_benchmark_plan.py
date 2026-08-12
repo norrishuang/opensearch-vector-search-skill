@@ -61,7 +61,7 @@ class GenerateBenchmarkPlanTests(unittest.TestCase):
         self.assertFalse(plan.force_merge)
         self.assertIn("--force-merge-enabled \\\n  false", plan.command)
 
-    def test_on_disk_defaults_to_explicit_recall_oriented_oversampling(self) -> None:
+    def test_on_disk_defaults_to_1bit_sq_baseline(self) -> None:
         plan = self.module.build_plan(
             self.parse(
                 "--host",
@@ -71,10 +71,31 @@ class GenerateBenchmarkPlanTests(unittest.TestCase):
                 "--on-disk",
             )
         )
-        self.assertEqual(plan.oversample_factor, 20.0)
+        self.assertEqual(plan.ef_search, 200)
+        self.assertEqual(plan.oversample_factor, 2.0)
         self.assertIn("--on-disk", plan.command)
-        self.assertIn("--oversample-factor \\\n  20", plan.command)
-        self.assertTrue(any("sweep lower values" in item for item in plan.warnings))
+        self.assertIn("--ef-search \\\n  200", plan.command)
+        self.assertIn("--oversample-factor \\\n  2", plan.command)
+        self.assertTrue(any("1-bit SQ baseline" in item for item in plan.warnings))
+
+    def test_on_disk_preserves_explicit_query_tuning(self) -> None:
+        plan = self.module.build_plan(
+            self.parse(
+                "--host",
+                "example.es.amazonaws.com",
+                "--db-label",
+                "ondisk-recall",
+                "--on-disk",
+                "--ef-search",
+                "800",
+                "--oversample-factor",
+                "5",
+            )
+        )
+        self.assertEqual(plan.ef_search, 800)
+        self.assertEqual(plan.oversample_factor, 5.0)
+        self.assertIn("--ef-search \\\n  800", plan.command)
+        self.assertIn("--oversample-factor \\\n  5", plan.command)
 
     def test_serverless_uses_sigv4_shape_and_one_indexing_client(self) -> None:
         plan = self.module.build_plan(

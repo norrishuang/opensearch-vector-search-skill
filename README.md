@@ -105,6 +105,7 @@ Then reference it in your agent JSON (`.kiro/agents/<agent>.json`):
 ├── SKILL.md                              # Skill definition and workflows
 ├── references/
 │   ├── vector-search.md                  # k-NN, HNSW, disk mode guide
+│   ├── quantization-1bit-32x.md           # 1-bit SQ on-disk tuning and cost data
 │   ├── quantization-techniques.md        # Compression techniques comparison
 │   ├── cost-optimization.md              # Instance sizing, memory formulas, cost cases
 │   ├── cluster-tuning.md                 # JVM, thread pools, node configuration

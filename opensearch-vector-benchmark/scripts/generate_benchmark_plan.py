@@ -109,7 +109,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--replicas", type=nonnegative_int, default=0)
     result.add_argument("--m", type=positive_int, default=16)
     result.add_argument("--ef-construction", type=positive_int, default=200)
-    result.add_argument("--ef-search", type=positive_int, default=100)
+    result.add_argument("--ef-search", type=positive_int)
     result.add_argument("--indexing-clients", type=positive_int)
     result.add_argument("--num-per-batch", type=positive_int)
     result.add_argument(
@@ -160,12 +160,21 @@ def build_plan(args: argparse.Namespace) -> Plan:
 
     oversample_factor = args.oversample_factor
     if args.on_disk and oversample_factor is None:
-        oversample_factor = 20.0
+        oversample_factor = 2.0
         warnings.append(
-            "On-disk defaulted to oversample factor 20; sweep lower values for QPS/recall."
+            "On-disk 32x defaulted to oversample factor 2 from the OpenSearch 3.7 "
+            "100M 1-bit SQ baseline; remeasure for this dataset and version."
         )
     if oversample_factor is None:
         oversample_factor = 1.0
+    ef_search = args.ef_search
+    if ef_search is None:
+        ef_search = 200 if args.on_disk else 100
+        if args.on_disk:
+            warnings.append(
+                "On-disk 32x defaulted to ef_search 200 from the OpenSearch 3.7 "
+                "100M 1-bit SQ baseline; also test 800 when recall is the priority."
+            )
 
     if args.quantization == "bq" and not args.on_disk and args.oversample_factor is None:
         warnings.append(
@@ -188,6 +197,7 @@ def build_plan(args: argparse.Namespace) -> Plan:
         indexing_clients=indexing_clients,
         num_per_batch=num_per_batch,
         oversample_factor=oversample_factor,
+        ef_search=ef_search,
         force_merge=force_merge,
     )
     return Plan(
@@ -208,7 +218,7 @@ def build_plan(args: argparse.Namespace) -> Plan:
         replicas=args.replicas,
         m=args.m,
         ef_construction=args.ef_construction,
-        ef_search=args.ef_search,
+        ef_search=ef_search,
         indexing_clients=indexing_clients,
         num_per_batch=num_per_batch,
         concurrency=args.concurrency,
@@ -228,6 +238,7 @@ def build_command(
     indexing_clients: int,
     num_per_batch: int | None,
     oversample_factor: float,
+    ef_search: int,
     force_merge: bool,
 ) -> str:
     command = ["vectordbbench", "awsopensearch"]
@@ -264,7 +275,7 @@ def build_command(
             [
                 ("--m", str(args.m)),
                 ("--ef-construction", str(args.ef_construction)),
-                ("--ef-search", str(args.ef_search)),
+                ("--ef-search", str(ef_search)),
                 ("--quantization-type", args.quantization),
                 ("--oversample-factor", format(oversample_factor, "g")),
             ]

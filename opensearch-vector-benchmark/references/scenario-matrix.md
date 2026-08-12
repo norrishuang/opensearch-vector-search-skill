@@ -46,12 +46,13 @@ Run these candidates first:
 | baseline | in memory | fp32 | 1 | Accuracy and throughput reference |
 | fp16 | in memory | fp16 | 1 | Memory reduction with modest accuracy risk |
 | binary | in memory | bq | 1, 5, 10, 20 | Binary quantization tradeoff |
-| on-disk | on disk, 32x field compression | fp32 | 1, 2, 5, 10, 20 | Page-cache and rescore tradeoff |
+| on-disk 1-bit SQ | on disk, 32x field compression | fp32 | 2 first; then 1, 5, 10, 20 | Page-cache and rescore tradeoff on OpenSearch 3.6+ |
 
 VectorDBBench's current OpenSearch client creates on-disk fields with `mode=on_disk` and
-`compression_level=32x`. Keep this separate from the `--quantization-type bq` in-memory candidate.
-If combining the two intentionally, label it as a separate experiment and inspect the dry-run and
-created mapping.
+`compression_level=32x`. On OpenSearch 3.6+, this defaults to 1-bit SQ; prefer
+3.7+ for the SQ rescoring prefetch path. Keep this separate from the
+`--quantization-type bq` in-memory candidate. If combining the two intentionally,
+label it as a separate experiment and inspect the dry-run and created mapping.
 
 ## Deployment Rules
 
@@ -118,8 +119,8 @@ truth generation method.
 Run ordered sweeps and change one axis at a time:
 
 - query concurrency: `1,10,20,40,60,80`
-- `ef_search`: 40, 100, 200, 400
-- on-disk oversampling: 1, 2, 5, 10, 20
+- `ef_search`: 40, 100, 200, 400; add 800 for the 1-bit SQ recall-oriented candidate
+- on-disk 1-bit SQ oversampling: start at 2, then sweep 1, 5, 10, 20
 - indexing clients: 10, 20, 40, then higher only if the client and cluster have headroom
 - shards: choose a narrow range around the shard size and CPU-based estimate
 
