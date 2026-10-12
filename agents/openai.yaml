@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenSearch Vector Search"
+  short_description: "Design and size OpenSearch vector search clusters"
+  default_prompt: "Use $opensearch-vector-search to guide me through the choices needed to size an OpenSearch vector search cluster."

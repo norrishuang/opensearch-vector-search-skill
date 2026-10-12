@@ -8,6 +8,7 @@ Supports **[OpenClaw](https://openclaw.ai)** and **[Kiro](https://kiro.dev)**.
 
 - **Vector Search Configuration** — FAISS/HNSW parameter tuning, disk mode, space type selection
 - **Capacity Planning** — HNSW memory formula calculations, instance sizing recommendations
+- **Guided Sizing Intake** — Interactive choices for vector count, dimensions, algorithm, mode, compression, performance, and availability
 - **Quantization Techniques** — FP16, Byte, Binary, Product Quantization with recall/cost tradeoffs
 - **Cost Estimation** — Real-time AWS pricing via Pricing API, monthly cost projections
 - **Cluster Tuning** — JVM, thread pools, shard strategies, node roles
@@ -103,8 +104,11 @@ Then reference it in your agent JSON (`.kiro/agents/<agent>.json`):
 
 ```
 ├── SKILL.md                              # Skill definition and workflows
+├── agents/
+│   └── openai.yaml                       # Skill UI metadata and guided default prompt
 ├── references/
 │   ├── vector-search.md                  # k-NN, HNSW, disk mode guide
+│   ├── capacity-planning-intake.md        # Guided user questionnaire and defaults
 │   ├── quantization-1bit-32x.md           # 1-bit SQ on-disk tuning and cost data
 │   ├── quantization-techniques.md        # Compression techniques comparison
 │   ├── cost-optimization.md              # Instance sizing, memory formulas, cost cases

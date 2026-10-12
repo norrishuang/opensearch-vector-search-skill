@@ -1,6 +1,6 @@
 ---
 name: opensearch-vector-search
-version: 1.4.0
+version: 1.5.0
 repository: https://github.com/norrishuang/opensearch-vector-search-skill
 description: |
   Amazon OpenSearch vector search expert knowledge base. Comprehensive guidance on vector search configuration, cluster tuning, quantization, cost optimization, instance sizing, and pricing estimation.
@@ -52,6 +52,7 @@ Read the corresponding reference file based on the question type:
 | Vector search, k-NN, HNSW, disk mode | `references/vector-search.md` | vector, knn, hnsw, warmup, disk mode, on_disk |
 | 1-bit SQ, 32x on-disk tuning and cost | `references/quantization-1bit-32x.md` | 1-bit, scalar quantization, SQ, 32x, on_disk, oversample, cost |
 | Other quantization techniques | `references/quantization-techniques.md` | quantization, binary, byte, fp16, product quantization |
+| Guided capacity-planning intake | `references/capacity-planning-intake.md` | size cluster, estimate resources, not sure, options, questionnaire |
 | Cost optimization, instance sizing, memory calc | `references/cost-optimization.md` | cost, pricing, instance, memory calculation, cluster sizing, budget |
 | Cluster tuning, JVM, thread pools | `references/cluster-tuning.md` | JVM, heap, thread pool, node role, shard allocation |
 | Performance benchmarks, dataset sizing | `references/performance-benchmarks.md` | benchmark, QPS, latency, recall, dataset size |
@@ -63,16 +64,57 @@ Read the corresponding reference file based on the question type:
 
 ## Core Workflows
 
+### 0. Guide Users Who Have Not Supplied Enough Context
+
+Do not expect the user to know OpenSearch terminology or to compose a complete
+capacity-planning prompt.
+
+When the request is broad, such as "help me design vector search", "estimate a
+vector database cluster", or "what information do you need?", first offer this
+short task menu:
+
+1. Cluster resource and cost estimate
+2. Vector index and algorithm design
+3. Quantization/compression selection
+4. Existing cluster review
+5. Performance benchmark planning
+
+Ask the user to reply with a number or describe the desired outcome. If their
+intent is already clear, skip the menu and continue directly.
+
+For resource estimates, read
+`references/capacity-planning-intake.md` and present its guided input form. Accept
+option numbers, labels, natural-language answers, or pasted values. Do not require
+the user to understand the difference between engine, ANN method, similarity
+metric, mode, and quantization before continuing.
+
+Interaction rules:
+
+- Ask for missing inputs in one compact round instead of one question per turn.
+- Mark only vector count and dimension as initially required. If either is unknown,
+  help derive it from documents/items × vectors per item or from the embedding model.
+- Offer recommended defaults and an "unsure—recommend for me" choice.
+- Never silently choose a lossy compression level, zero replicas, or an availability
+  target. State the assumption and show at least one alternative.
+- If the user cannot provide QPS, latency, growth, or recall targets, produce a
+  preliminary range with explicit assumptions and list which inputs most affect it.
+- Confirm the normalized inputs before presenting the final sizing calculation.
+- Do not repeat the full form when the user has already supplied most fields; ask only
+  for the material gaps and preserve all prior answers.
+
 ### 1. Answering Vector Search Configuration Questions
 
 1. Read `references/vector-search.md`
 2. Recommend in-memory mode or disk mode based on user scenario (latency requirements, data scale, QPS)
 3. Provide specific mapping JSON configuration
-4. Recommend FAISS engine + cosine similarity + 7/8 series instances
+4. Use FAISS as the general engine starting point. Select the similarity metric
+   from the embedding model's requirements; do not default to cosine when that is
+   unknown. Treat all choices as candidates until the user confirms them.
 
 ### 2. Capacity Planning & Instance Sizing (Most Common Scenario)
 
-After user provides vector count and dimensions:
+After collecting and confirming inputs with
+`references/capacity-planning-intake.md`:
 
 1. Read `references/cost-optimization.md` for memory calculation formulas and examples
 2. Calculate using the standard HNSW memory formula (source: AWS official blog):
@@ -208,10 +250,12 @@ Output fields: instance_type, vcpu, memory_gib, price_per_hour_usd, price_per_mo
 
 ## Recommended Defaults
 
-Always recommend these defaults unless user has specific requirements:
+Use these as visible starting candidates when the user has not made a choice.
+Confirm them or compare alternatives before a final recommendation:
 
-- **Engine**: FAISS
-- **Similarity**: cosine
+- **Engine candidate**: FAISS for most ANN workloads
+- **Similarity**: Match the embedding model; use cosine only when the model or
+  vector normalization supports it
 - **Instance family** (Gen 7+ only, never recommend older generations):
   - **Vector search (k-NN)**: r7g/r8g/r8gd (memory-optimized, lowest search latency; r8g Graviton4 ~30% faster than r7g)
   - **Indexing-heavy + vector**: OR2 (optimized, S3 durability, good memory-to-price ratio)
@@ -219,9 +263,12 @@ Always recommend these defaults unless user has specific requirements:
   - **Large dataset with NVMe**: OI2 (storage-optimized, no EBS needed)
   - Do NOT recommend: r6g, r5, m5, c5, i3, or any older instance families
 - **HNSW parameters**: ef_construction=512, m=16
-- **Quantization preference**: Byte (4x) for conservative production use; 1-bit SQ
-  (32x) for aggressive cost optimization on OpenSearch 3.6+, preferably 3.7+
-- **Disk mode threshold**: Consider when data > 50M vectors and 100-200ms latency is acceptable
+- **Quantization candidates**: Compare FP32/FP16 for quality-first, Byte (4x) for
+  balanced cost, and 1-bit SQ (32x) for aggressive cost optimization on
+  OpenSearch 3.6+, preferably 3.7+. Do not silently select a lossy option.
+- **Disk mode candidate**: Consider for memory-constrained, latency-tolerant
+  workloads after checking QPS, tail latency, recall, storage performance, and
+  OpenSearch version. Vector count alone is not a selection threshold.
 
 ### Instance Selection Decision Tree
 
@@ -240,8 +287,12 @@ Is this primarily a vector search (k-NN) workload?
 
 Organize cost/sizing answers in this structure:
 
-1. **Requirements confirmation**: Vector count, dimensions, QPS, latency requirements
+1. **Normalized inputs and assumptions**: Vector count, dimensions, growth horizon,
+   algorithm/mode, compression, QPS, latency, recall, replicas, region
 2. **Memory calculation**: Raw size → quantized size → required KNN memory
 3. **Cluster configuration**: Instance type × count, shards, replicas
 4. **Cost estimation**: Instance cost + EBS cost = monthly total
-5. **Optimization suggestions**: Quantization comparison, Reserved Instance discounts
+5. **Alternatives and sensitivity**: Compare at least a quality-first and cost-first
+   option when the user did not explicitly select compression/mode
+6. **Next validation step**: Identify assumptions that require a benchmark or live
+   measurement before production
