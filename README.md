@@ -10,7 +10,7 @@ Supports **[OpenClaw](https://openclaw.ai)** and **[Kiro](https://kiro.dev)**.
 - **Capacity Planning** — Storage/shard, vCPU, HNSW memory, and instance sizing constraints
 - **Guided Sizing Intake** — Interactive choices for vector count, dimensions, algorithm, mode, compression, performance, and availability
 - **Quantization Techniques** — FP16, Byte, Binary, Product Quantization with recall/cost tradeoffs
-- **Cost Estimation** — Real-time AWS pricing via Pricing API, monthly cost projections
+- **Cost Estimation** — Three instance options ranked by monthly cost from high to low
 - **Cluster Tuning** — JVM, thread pools, shard strategies, node roles
 - **Performance Benchmarks** — QPS/latency/recall data for various configurations
 - **VectorDBBench Runner Skill** — Reproducible benchmark planning for managed domains, Serverless, on-disk, quantization, and the OpenSearch s3vector engine

@@ -4,12 +4,22 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 from dataclasses import asdict, dataclass
 
 
 GIB = 1024**3
+
+
+@dataclass(frozen=True)
+class Candidate:
+    instance_type: str
+    memory_gib: float
+    vcpu: float
+    ebs_gib_per_node: float
+    monthly_instance_price: float
 
 
 @dataclass(frozen=True)
@@ -46,6 +56,37 @@ def non_negative(value: str) -> float:
     if number < 0:
         raise argparse.ArgumentTypeError("must be zero or greater")
     return number
+
+
+def candidate(value: str) -> Candidate:
+    parts = value.split(":")
+    if len(parts) != 5:
+        raise argparse.ArgumentTypeError(
+            "candidate must be INSTANCE:MEMORY_GIB:VCPU:EBS_GIB:MONTHLY_PRICE"
+        )
+    name, memory, vcpu, ebs, price = parts
+    if not name:
+        raise argparse.ArgumentTypeError("candidate instance type cannot be empty")
+    try:
+        parsed = Candidate(
+            instance_type=name,
+            memory_gib=float(memory),
+            vcpu=float(vcpu),
+            ebs_gib_per_node=float(ebs),
+            monthly_instance_price=float(price),
+        )
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "candidate resource and price fields must be numbers"
+        ) from exc
+    if min(
+        parsed.memory_gib,
+        parsed.vcpu,
+        parsed.ebs_gib_per_node,
+        parsed.monthly_instance_price,
+    ) <= 0:
+        raise argparse.ArgumentTypeError("candidate values must be greater than zero")
+    return parsed
 
 
 def parser() -> argparse.ArgumentParser:
@@ -91,6 +132,20 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--instance-vcpu", type=positive)
     result.add_argument("--ebs-gib-per-node", type=positive)
     result.add_argument("--ha-minimum-nodes", type=int, default=0)
+    result.add_argument(
+        "--storage-price-per-gib-month",
+        type=non_negative,
+        default=0.0,
+    )
+    result.add_argument(
+        "--candidate",
+        action="append",
+        type=candidate,
+        help=(
+            "Repeat exactly three times: "
+            "INSTANCE:MEMORY_GIB:VCPU:EBS_GIB:MONTHLY_PRICE"
+        ),
+    )
     result.add_argument("--format", choices=("text", "json"), default="text")
     return result
 
@@ -227,6 +282,88 @@ def rounded(data: Estimate) -> dict:
     return result
 
 
+def evaluate_candidates(args: argparse.Namespace) -> dict:
+    candidates = args.candidate or []
+    if len(candidates) != 3:
+        raise ValueError("candidate comparison requires exactly three candidates")
+    if len({item.instance_type for item in candidates}) != 3:
+        raise ValueError("candidate instance types must be different")
+
+    options = []
+    common_sizing = None
+    for item in candidates:
+        candidate_args = copy.copy(args)
+        candidate_args.instance_memory_gib = item.memory_gib
+        candidate_args.instance_vcpu = item.vcpu
+        candidate_args.ebs_gib_per_node = item.ebs_gib_per_node
+        candidate_args.candidate = None
+        sizing = estimate(candidate_args)
+        if common_sizing is None:
+            common_sizing = sizing
+        if sizing.final_data_nodes is None:
+            raise ValueError(f"could not size candidate {item.instance_type}")
+        instance_cost = item.monthly_instance_price * sizing.final_data_nodes
+        storage_cost = (
+            sizing.total_provisioned_storage_gib
+            * args.storage_price_per_gib_month
+        )
+        options.append(
+            {
+                "instance_type": item.instance_type,
+                "node_count": sizing.final_data_nodes,
+                "memory_gib_per_node": item.memory_gib,
+                "vcpu_per_node": item.vcpu,
+                "ebs_limit_gib_per_node": item.ebs_gib_per_node,
+                "ebs_required_gib_per_node": sizing.ebs_gib_per_final_node,
+                "nodes_by_memory": sizing.nodes_by_memory,
+                "nodes_by_cpu": sizing.nodes_by_cpu,
+                "nodes_by_storage": sizing.nodes_by_storage,
+                "ha_minimum_nodes": sizing.ha_minimum_nodes,
+                "winning_constraints": sizing.winning_constraints,
+                "monthly_instance_cost": instance_cost,
+                "monthly_storage_cost": storage_cost,
+                "estimated_monthly_total": instance_cost + storage_cost,
+            }
+        )
+
+    options.sort(
+        key=lambda item: item["estimated_monthly_total"],
+        reverse=True,
+    )
+    for order, option in enumerate(options, start=1):
+        option["cost_order_high_to_low"] = order
+        for key, value in option.items():
+            if isinstance(value, float):
+                option[key] = round(value, 2)
+    assert common_sizing is not None
+    return {
+        "shared_assumptions": {
+            "vector_count": args.vector_count,
+            "dimension": args.dimension,
+            "memory_compression": args.memory_compression,
+            "replicas": args.replicas,
+            "target_primary_shard_gib": args.target_primary_shard_gib,
+            "active_shards_per_vcpu": args.active_shards_per_vcpu,
+            "primary_index_gib": round(common_sizing.primary_index_gib, 2),
+            "primary_shards": common_sizing.primary_shards,
+            "active_shards": common_sizing.active_shards,
+            "required_vcpu": common_sizing.required_vcpu,
+            "total_knn_memory_gib": round(
+                common_sizing.total_knn_memory_gib, 2
+            ),
+            "total_provisioned_storage_gib": round(
+                common_sizing.total_provisioned_storage_gib, 2
+            ),
+        },
+        "options": options,
+        "recommendation": (
+            "No automatic performance recommendation from capacity and cost alone. "
+            "Use QPS, P95/P99 latency, recall, and benchmark results to recommend "
+            "one option separately; do not assume the cheapest option is best."
+        ),
+    }
+
+
 def print_text(data: Estimate) -> None:
     values = rounded(data)
     print("OpenSearch vector resource estimate")
@@ -261,9 +398,65 @@ def print_text(data: Estimate) -> None:
         print(f"Warning: {warning}")
 
 
+def print_candidate_options(report: dict) -> None:
+    assumptions = report["shared_assumptions"]
+    print("Shared assumptions")
+    print(
+        f"Vectors/dimension/compression: {assumptions['vector_count']} / "
+        f"{assumptions['dimension']} / {assumptions['memory_compression']}x"
+    )
+    print(
+        f"Replicas/shard target/shards per vCPU: {assumptions['replicas']} / "
+        f"{assumptions['target_primary_shard_gib']} GiB / "
+        f"{assumptions['active_shards_per_vcpu']}"
+    )
+    print(
+        f"Primary index/shards/active shards: "
+        f"{assumptions['primary_index_gib']} GiB / "
+        f"{assumptions['primary_shards']} / {assumptions['active_shards']}"
+    )
+    print(
+        f"Required vCPU/KNN memory/provisioned storage: "
+        f"{assumptions['required_vcpu']} / "
+        f"{assumptions['total_knn_memory_gib']} GiB / "
+        f"{assumptions['total_provisioned_storage_gib']} GiB"
+    )
+    print()
+    print("Three valid instance options (estimated monthly cost: high to low)")
+    for option in report["options"]:
+        print(
+            f"{option['cost_order_high_to_low']}. {option['instance_type']} × "
+            f"{option['node_count']}: ${option['estimated_monthly_total']}/month"
+        )
+        print(
+            f"   Per node: {option['vcpu_per_node']} vCPU, "
+            f"{option['memory_gib_per_node']} GiB RAM, "
+            f"{option['ebs_required_gib_per_node']} GiB EBS required"
+        )
+        print(
+            "   Node floors memory/cpu/storage/HA: "
+            f"{option['nodes_by_memory']}/{option['nodes_by_cpu']}/"
+            f"{option['nodes_by_storage']}/{option['ha_minimum_nodes']}; "
+            f"winner: {', '.join(option['winning_constraints'])}"
+        )
+        print(
+            f"   Compute ${option['monthly_instance_cost']} + "
+            f"storage ${option['monthly_storage_cost']}"
+        )
+    print("Costs exclude provisioned IOPS, throughput, and data transfer.")
+    print(f"Recommendation: {report['recommendation']}")
+
+
 def main() -> None:
     args = parser().parse_args()
     try:
+        if args.candidate:
+            report = evaluate_candidates(args)
+            if args.format == "json":
+                print(json.dumps(report, indent=2))
+            else:
+                print_candidate_options(report)
+            return
         result = estimate(args)
     except ValueError as exc:
         parser().error(str(exc))

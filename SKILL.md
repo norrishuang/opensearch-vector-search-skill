@@ -1,6 +1,6 @@
 ---
 name: opensearch-vector-search
-version: 1.6.0
+version: 1.7.0
 repository: https://github.com/norrishuang/opensearch-vector-search-skill
 description: |
   Amazon OpenSearch vector search expert knowledge base. Comprehensive guidance on vector search configuration, cluster tuning, quantization, cost optimization, instance sizing, and pricing estimation.
@@ -153,7 +153,8 @@ After collecting and confirming inputs with
    Remaining memory = node_memory - JVM Heap
    KNN available memory = remaining × 75%  (with knn.memory.circuit_breaker.limit=70%, ~35% of node memory)
    ```
-5. For each candidate instance, calculate independent node-count floors:
+5. Select three different candidate instance types and calculate independent
+   node-count floors for each:
    ```
    Nodes by memory = ceil(total KNN memory / KNN memory available per node)
    Nodes by CPU = ceil(required vCPU / instance vCPU)
@@ -161,8 +162,12 @@ After collecting and confirming inputs with
    Final data nodes = max(memory floor, CPU floor, storage floor, HA floor)
    ```
    Do not select an instance from memory alone. Report which constraint wins.
-6. Prefer `scripts/estimate_vector_resources.py` for deterministic calculations.
-7. Run the pricing script for real-time pricing only when cost is requested.
+6. Keep workload, compression, shard, replica, and availability inputs identical
+   across the three candidates so the instance comparison is fair.
+7. Prefer `scripts/estimate_vector_resources.py` for deterministic calculations.
+8. Run the pricing script for current prices when cost is requested. Include only
+   candidates that satisfy all resource floors, then sort the three valid options
+   by estimated monthly total cost from highest to lowest.
 
 ### 3. Cost Estimation (with Real-Time Pricing)
 
@@ -181,7 +186,17 @@ When user needs cost estimation:
    ```
    Replica copies are already included in active shards, KNN memory, storage, and
    final node count. Never multiply instance cost by `(replicas + 1)` again.
-4. Compare cost differences across quantization options
+4. Present exactly three valid instance-type options when enough current pricing
+   and instance specification data is available:
+   - Option 1: highest estimated monthly cost
+   - Option 2: middle estimated monthly cost
+   - Option 3: lowest estimated monthly cost
+5. Recommend one option separately; do not assume the cheapest is best. Explain
+   the performance, node-count, operational, and growth-headroom tradeoff.
+   If QPS/latency/recall evidence is missing, state that the recommendation is
+   provisional and identify which option should be benchmarked first.
+6. If current pricing is unavailable, show three resource-valid candidates but
+   label their cost order unverified. Do not invent prices or claim high-to-low order.
 
 For 1-bit or 32x on-disk questions, read
 `references/quantization-1bit-32x.md` before estimating capacity or cost. Treat
@@ -319,9 +334,10 @@ Organize cost/sizing answers in this structure:
    index size → primary shards → active shards
 3. **Resource constraints**: Nodes required by KNN memory, shard/vCPU, storage,
    and availability; identify the winning constraint
-4. **Cluster configuration**: Instance type × final node count, primary shards,
-   replicas, and EBS per node
-5. **Cost estimation**: Instance cost + EBS cost = monthly total
+4. **Three instance options, cost high to low**: For each option show instance
+   type × final node count, per-node vCPU/RAM, winning constraint, and EBS per node
+5. **Cost estimation**: For each option show instance cost + EBS cost = monthly
+   total; identify whether prices are current or unverified
 6. **Alternatives and sensitivity**: Compare at least a quality-first and cost-first
    option when the user did not explicitly select compression/mode
 7. **Next validation step**: Identify assumptions that require a benchmark or live

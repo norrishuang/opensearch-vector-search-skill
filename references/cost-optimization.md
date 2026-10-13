@@ -1189,7 +1189,66 @@ growth before this step.
 Report the winning constraint. A result such as "4 nodes required by CPU, 6 by
 memory, therefore choose 6" is auditable; "choose 6 nodes" alone is not.
 
-### 5. Cost Calculation
+### 5. Three-Option Instance Comparison
+
+Evaluate three different instance types against the same workload inputs. Do not
+change compression, replicas, target shard size, or growth assumptions between
+rows unless the user explicitly requests an architecture comparison.
+
+Every option must satisfy:
+
+- KNN memory node floor
+- active-shard/vCPU node floor
+- per-node storage limit
+- minimum availability node count
+
+Discard invalid candidates before presenting the result. Sort the three valid
+options by estimated monthly total cost from highest to lowest:
+
+| Order | Purpose | Required content |
+|---|---|---|
+| 1 | Highest cost | Instance type/count, vCPU/RAM, winning constraint, EBS/node, monthly total |
+| 2 | Middle cost | Same fields plus why it is the recommended balance or not |
+| 3 | Lowest cost | Same fields plus performance and operational tradeoffs |
+
+The labels performance-first, balanced, and cost-first describe tradeoffs; actual
+ordering must come from calculated cost. Do not assume that a larger instance is
+always more expensive after node count is applied.
+
+Print the normalized workload, shard, replica, compression, storage, and memory
+assumptions once before the three options. After the cost-ordered table, add a
+separate recommendation:
+
+- If QPS, latency, and recall objectives plus benchmark evidence are available,
+  name the recommended option and explain why.
+- If performance evidence is unavailable, state that no final performance
+  recommendation can be made from capacity and cost alone. Identify the option
+  to benchmark first, but do not automatically declare the cheapest option best.
+
+Use current regional prices when the user asks for cost. If prices cannot be
+retrieved, show three resource-valid configurations but label cost ranking as
+unverified and do not fabricate a high-to-low order.
+
+The calculator accepts exactly three repeatable candidate arguments:
+
+```bash
+python3 scripts/estimate_vector_resources.py \
+  --vector-count 100000000 \
+  --dimension 768 \
+  --non-vector-gib 200 \
+  --memory-compression 32 \
+  --replicas 1 \
+  --ha-minimum-nodes 3 \
+  --storage-price-per-gib-month 0.08 \
+  --candidate r8g.4xlarge:128:16:500:MONTHLY_INSTANCE_PRICE \
+  --candidate r8g.2xlarge:64:8:500:MONTHLY_INSTANCE_PRICE \
+  --candidate r8g.xlarge:32:4:500:MONTHLY_INSTANCE_PRICE
+```
+
+Candidate format:
+`INSTANCE_TYPE:MEMORY_GIB:VCPU:EBS_GIB_PER_NODE:MONTHLY_INSTANCE_PRICE`.
+
+### 6. Cost Calculation
 
 ```
 Monthly Total Cost = Instance Cost + Storage Cost + Data Transfer Cost

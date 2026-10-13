@@ -81,6 +81,7 @@ the candidate configurations. Present this expanded menu when useful:
 
 7. 部署信息
    AWS Region、OpenSearch 版本、预算或已有实例限制
+   成本结果默认给出 3 个不同实例类型，并按月成本从高到低排列
 ```
 
 Do not expose every choice when a shorter question is enough. For example, if the
@@ -101,6 +102,7 @@ For a production recommendation, also collect or explicitly estimate:
 - target primary shard size, default 50 GiB and normally 25-50 GiB
 - active shards per vCPU, default 1
 - replica count
+- AWS Region for current pricing; without it, cost ranking remains unverified
 
 Help derive them when necessary:
 
