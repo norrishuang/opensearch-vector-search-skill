@@ -7,7 +7,7 @@ Supports **[OpenClaw](https://openclaw.ai)** and **[Kiro](https://kiro.dev)**.
 ## Features
 
 - **Vector Search Configuration** — FAISS/HNSW parameter tuning, disk mode, space type selection
-- **Capacity Planning** — HNSW memory formula calculations, instance sizing recommendations
+- **Capacity Planning** — Storage/shard, vCPU, HNSW memory, and instance sizing constraints
 - **Guided Sizing Intake** — Interactive choices for vector count, dimensions, algorithm, mode, compression, performance, and availability
 - **Quantization Techniques** — FP16, Byte, Binary, Product Quantization with recall/cost tradeoffs
 - **Cost Estimation** — Real-time AWS pricing via Pricing API, monthly cost projections
@@ -119,6 +119,7 @@ Then reference it in your agent JSON (`.kiro/agents/<agent>.json`):
 │   └── optimized-instances.md            # OR1/OR2/OM2/OI2 instance guide
 ├── scripts/
 │   ├── get_opensearch_pricing.py         # AWS Pricing API query tool
+│   ├── estimate_vector_resources.py       # Storage, shard, CPU, and memory sizing
 │   └── analyze_cluster.py               # Live cluster analyzer (read-only)
 └── opensearch-vector-benchmark/
     ├── SKILL.md                          # VectorDBBench workflow and safety guardrails
@@ -216,6 +217,15 @@ Byte (4x):    Memory = 1.1 × (1 × d + 8 × m) × num_vectors × (replicas + 1)
 ```
 JVM Heap = min(node_memory × 50%, 32GB)
 KNN available = (node_memory - JVM Heap) × 75%
+```
+
+### Shard and CPU Floor
+
+```
+Primary shards = ceil(primary index GiB / target primary shard GiB)
+Active shards = primary shards × (replicas + 1)
+Required vCPU = ceil(active shards / active shards per vCPU)
+Final nodes = max(nodes by memory, CPU, storage, and availability)
 ```
 
 ## License

@@ -72,7 +72,14 @@ the candidate configurations. Present this expanded menu when useful:
    副本数：0 / 1（生产常用）/ 2 / 不确定
    未来 12 个月增长：例如 30%
 
-6. 部署信息
+6. 磁盘数据与 shard/CPU
+   非向量字段主分片数据量：例如 200 GiB；或每条文档平均字节数
+   目标 primary shard 大小：25-50 GiB，默认 50 GiB
+   active shard:vCPU：默认 1:1，可填写自定义比例
+   如果已有索引，优先提供实际 pri.store.size；它将直接作为主分片
+   总大小，不再额外叠加向量、非向量数据或索引开销系数
+
+7. 部署信息
    AWS Region、OpenSearch 版本、预算或已有实例限制
 ```
 
@@ -86,6 +93,14 @@ The initial minimum is:
 
 - vector count at the planning horizon
 - vector dimension
+
+For a production recommendation, also collect or explicitly estimate:
+
+- non-vector primary data size, excluding replicas
+- measured `pri.store.size` when available; it overrides component estimates
+- target primary shard size, default 50 GiB and normally 25-50 GiB
+- active shards per vCPU, default 1
+- replica count
 
 Help derive them when necessary:
 
@@ -111,6 +126,7 @@ Users may use "algorithm" to mean different things. Normalize it into:
 - storage mode: in-memory or on-disk
 - quantization/compression: FP32, FP16/2x, byte/4x, 4-bit/8x,
   2-bit/16x, or 1-bit/32x
+- vector disk compression, which is separate from KNN memory compression
 
 Do not force a similarity choice if the embedding model defines it. Use cosine as
 the provisional default only when vectors are normalized or the model recommends
@@ -147,8 +163,11 @@ comparison using clearly labeled scenarios:
 4. cost-first candidate: on-disk 32x only when version and latency constraints
    make it plausible
 
-State that the result is memory-capacity sizing, not a QPS guarantee. Request the
-following next because they commonly change node count or architecture:
+Assume zero non-vector data only for an explicitly labeled vector-only lower bound.
+Do not present that result as the production estimate.
+
+State that the result is capacity sizing, not a QPS guarantee. Request the following
+next because they commonly change node count or architecture:
 
 - peak QPS and concurrency
 - P95/P99 latency target
@@ -157,6 +176,8 @@ following next because they commonly change node count or architecture:
 - filter selectivity and hybrid-search use
 - availability target and AZ topology
 - OpenSearch version and Region
+- non-vector primary data size or average non-vector bytes per document
+- target shard size and active-shard-to-vCPU ratio
 
 ## Confirmation Before Calculation
 
@@ -170,6 +191,9 @@ Before calculating, summarize normalized values in a compact table:
 | Mode and compression | ... | selected/scenario |
 | HNSW `m` | ... | selected/default |
 | Replicas | ... | selected/scenario |
+| Primary non-vector data | ... | provided/estimated/lower-bound assumption |
+| Target primary shard size | ... | selected/default 50 GiB |
+| Active shards per vCPU | ... | selected/default 1 |
 | QPS and latency | ... | provided/unknown |
 | Version and Region | ... | provided/unknown |
 

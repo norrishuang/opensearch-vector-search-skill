@@ -1,6 +1,6 @@
 ---
 name: opensearch-vector-search
-version: 1.5.0
+version: 1.6.0
 repository: https://github.com/norrishuang/opensearch-vector-search-skill
 description: |
   Amazon OpenSearch vector search expert knowledge base. Comprehensive guidance on vector search configuration, cluster tuning, quantization, cost optimization, instance sizing, and pricing estimation.
@@ -117,7 +117,7 @@ After collecting and confirming inputs with
 `references/capacity-planning-intake.md`:
 
 1. Read `references/cost-optimization.md` for memory calculation formulas and examples
-2. Calculate using the standard HNSW memory formula (source: AWS official blog):
+2. Calculate vector KNN memory using the standard HNSW memory formula:
    ```
    Unquantized (float32):
      Memory = 1.1 × (4 × d + 8 × m) × num_vectors × (replicas + 1) bytes
@@ -131,14 +131,38 @@ After collecting and confirming inputs with
    
    Where: d=vector dimensions, m=HNSW connections (default 16), num_vectors=total vector count
    ```
-3. Apply OpenSearch node memory allocation rules:
+3. Calculate primary disk footprint and the shard/vCPU floor:
+   ```
+   Primary vector disk GiB =
+     vector_count × dimension × bytes_per_dimension
+     ÷ disk_compression_ratio ÷ 1024^3
+
+   Primary index GiB =
+     (primary_vector_disk_GiB + primary_non_vector_GiB)
+     × storage_overhead_factor
+
+   Primary shards = ceil(primary_index_GiB / target_primary_shard_GiB)
+   Active shards = primary_shards × (replicas + 1)
+   Required vCPU = ceil(active_shards / active_shards_per_vCPU)
+   ```
+   Use a user-selected target primary shard size in the 25-50 GiB range;
+   default to 50 GiB. Default to one active shard per vCPU.
+4. Apply OpenSearch node memory allocation rules:
    ```
    JVM Heap = min(node_memory × 50%, 32GB)
    Remaining memory = node_memory - JVM Heap
    KNN available memory = remaining × 75%  (with knn.memory.circuit_breaker.limit=70%, ~35% of node memory)
    ```
-4. Select instance type, ensuring total cluster KNN available memory > vector index memory requirement
-5. Run pricing script for real-time pricing (see below)
+5. For each candidate instance, calculate independent node-count floors:
+   ```
+   Nodes by memory = ceil(total KNN memory / KNN memory available per node)
+   Nodes by CPU = ceil(required vCPU / instance vCPU)
+   Nodes by storage = ceil(total provisioned storage / EBS GiB per node)
+   Final data nodes = max(memory floor, CPU floor, storage floor, HA floor)
+   ```
+   Do not select an instance from memory alone. Report which constraint wins.
+6. Prefer `scripts/estimate_vector_resources.py` for deterministic calculations.
+7. Run the pricing script for real-time pricing only when cost is requested.
 
 ### 3. Cost Estimation (with Real-Time Pricing)
 
@@ -151,10 +175,12 @@ When user needs cost estimation:
    ```
 3. Calculate monthly cost:
    ```
-   Instance cost = unit_price × node_count × (1 + replica_count)
-   EBS cost = capacity(GB) × $0.08 + additional IOPS charges
+   Instance cost = unit_price × final_data_node_count
+   EBS cost = total provisioned EBS GiB × unit storage price + IOPS/throughput
    Total cost = Instance cost + EBS cost
    ```
+   Replica copies are already included in active shards, KNN memory, storage, and
+   final node count. Never multiply instance cost by `(replicas + 1)` again.
 4. Compare cost differences across quantization options
 
 For 1-bit or 32x on-disk questions, read
@@ -289,10 +315,14 @@ Organize cost/sizing answers in this structure:
 
 1. **Normalized inputs and assumptions**: Vector count, dimensions, growth horizon,
    algorithm/mode, compression, QPS, latency, recall, replicas, region
-2. **Memory calculation**: Raw size → quantized size → required KNN memory
-3. **Cluster configuration**: Instance type × count, shards, replicas
-4. **Cost estimation**: Instance cost + EBS cost = monthly total
-5. **Alternatives and sensitivity**: Compare at least a quality-first and cost-first
+2. **Storage and shard calculation**: Vector disk + non-vector disk → primary
+   index size → primary shards → active shards
+3. **Resource constraints**: Nodes required by KNN memory, shard/vCPU, storage,
+   and availability; identify the winning constraint
+4. **Cluster configuration**: Instance type × final node count, primary shards,
+   replicas, and EBS per node
+5. **Cost estimation**: Instance cost + EBS cost = monthly total
+6. **Alternatives and sensitivity**: Compare at least a quality-first and cost-first
    option when the user did not explicitly select compression/mode
-6. **Next validation step**: Identify assumptions that require a benchmark or live
+7. **Next validation step**: Identify assumptions that require a benchmark or live
    measurement before production

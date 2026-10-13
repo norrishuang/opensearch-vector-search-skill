@@ -656,14 +656,27 @@ Need maximum cost optimization?
 - Too few shards: Cannot fully utilize cluster resources
 - Too many shards: Increases management overhead and memory usage
 
+Size shards from primary data volume before selecting node count. Do not derive
+shard count from an already selected node count.
+
 **Recommended Formula**:
 ```
-Number of shards = Number of data nodes × 1.5 to 2
+Primary index GiB =
+  (primary vector disk GiB + primary non-vector GiB)
+  × storage overhead factor
+
+Primary shards = ceil(primary index GiB / target primary shard GiB)
+Active shards = primary shards × (replicas + 1)
+Required vCPU = ceil(active shards / active shards per vCPU)
 ```
 
-**Examples**:
-- 3-node cluster: 4-6 shards
-- 5-node cluster: 7-10 shards
+- Target 25-50 GiB per primary shard; use 50 GiB by default.
+- Use one active shard per vCPU by default.
+- Include replica shards in active shard and CPU calculations.
+- Use primary data size before replicas to choose primary shard count.
+- Prefer actual `pri.store.size` from an existing production-shaped index.
+- Estimates must include vector data, non-vector fields, `_source`, doc values,
+  postings, and index overhead where applicable.
 
 **Cost Impact**:
 - Each shard consumes approximately 10-50MB of memory
@@ -1017,6 +1030,10 @@ Number of shards = Number of data nodes × 1.5 to 2
 
 ## Real-World Cost Case Studies
 
+The cases below are historical workload examples, not reusable sizing answers.
+Recalculate their primary storage, shard/vCPU floor, KNN-memory floor, and final
+node count with the current model before applying them to another workload.
+
 ### Case 1: Small-Scale Application (1M Vectors, 768 Dimensions)
 
 **Requirements**:
@@ -1089,41 +1106,103 @@ Number of shards = Number of data nodes × 1.5 to 2
 
 ## Cost Calculation Formulas
 
-### Basic Cost Calculation
+### Resource Sizing Order
+
+Do not size a vector cluster from memory alone. Calculate storage/shards, CPU,
+KNN memory, and availability independently, then use the largest node-count floor.
+
+### 1. Primary Disk Footprint
+
+Prefer a measured primary-store size. For a new workload, estimate:
+
+```
+Primary vector disk GiB =
+  vector_count × dimension × bytes_per_dimension
+  ÷ vector_disk_compression_ratio ÷ 1024^3
+
+Primary non-vector GiB =
+  supplied total
+  OR vector_count × average_non_vector_bytes_per_document ÷ 1024^3
+
+Primary index GiB =
+  (primary vector disk GiB + primary non-vector GiB)
+  × storage_overhead_factor
+```
+
+Use 4 bytes per dimension for float32 unless the persisted representation is
+known to differ. Memory quantization and disk compression are separate inputs.
+For on-disk search, do not divide the full-precision disk copy by the in-memory
+compression ratio unless the index format actually compresses that disk copy.
+
+Use `storage_overhead_factor=1.2` as a preliminary default only when measured
+primary-store data is unavailable. Avoid double-counting non-vector data if a
+provided store size already includes it.
+
+If the user provides measured `pri.store.size`, use it directly as
+`primary_index_GiB`. Do not add component estimates or apply the overhead factor
+again. The calculator accepts this value through `--primary-index-gib`.
+
+### 2. Shard and CPU Requirement
+
+```
+Target primary shard GiB = user value, default 50, normally 25-50
+Primary shards = ceil(primary index GiB / target primary shard GiB)
+Active shards = primary shards × (replicas + 1)
+Required vCPU = ceil(active shards / active_shards_per_vCPU)
+```
+
+Default `active_shards_per_vCPU=1`, equivalent to active shard:vCPU = 1:1.
+Allow the user to override it. This ratio establishes a CPU floor for shard
+execution and does not replace workload benchmarking.
+
+### 3. KNN Memory Requirement
+
+```
+KNN memory bytes =
+  1.1 × (compressed_vector_bytes_per_record + 8 × HNSW_m)
+  × vector_count × (replicas + 1)
+
+Node JVM heap GiB = min(node_memory_GiB × 0.5, 32)
+Node KNN available GiB = (node_memory_GiB - JVM_heap_GiB) × 0.75
+Nodes by memory = ceil(total_KNN_memory_GiB / node_KNN_available_GiB)
+```
+
+The compression ratio applies to the vector payload; HNSW graph links remain
+uncompressed in this model.
+
+### 4. Storage and Final Node Count
+
+```
+Total provisioned storage GiB =
+  primary_index_GiB × (replicas + 1) × storage_headroom_factor
+
+Nodes by CPU = ceil(required_vCPU / instance_vCPU)
+Nodes by storage = ceil(total_provisioned_storage_GiB / EBS_GiB_per_node)
+Final data nodes =
+  max(nodes_by_memory, nodes_by_CPU, nodes_by_storage, HA_minimum_nodes)
+```
+
+Use `storage_headroom_factor=1.2` as a starting point for merges and operational
+headroom. If the planning vector count does not already include growth, apply
+growth before this step.
+
+Report the winning constraint. A result such as "4 nodes required by CPU, 6 by
+memory, therefore choose 6" is auditable; "choose 6 nodes" alone is not.
+
+### 5. Cost Calculation
 
 ```
 Monthly Total Cost = Instance Cost + Storage Cost + Data Transfer Cost
 
-Instance Cost = Instance Unit Price × Instance Count × (1 + Replica Count)
-Storage Cost = EBS Capacity Cost + IOPS Cost + Throughput Cost
+Instance Cost = Instance Unit Price × Final Data Node Count
+Storage Cost = Total Provisioned EBS GiB × Unit Price + IOPS + Throughput
 Data Transfer Cost = Cross-AZ Transfer + Cross-Region Transfer + Internet Outbound
 ```
 
-### Vector Index Size Estimation
+Do not multiply instance cost by `(replicas + 1)`. Replica impact is already
+included in memory, active shards, storage, and therefore final node count.
 
-```
-Index Size (GB) = Vector Count × Dimensions × 4 bytes / (1024^3) / Compression Ratio
-
-Example:
-- 100M vectors × 768 dimensions × 4 bytes = 307.2 GB (no compression)
-- With 8x compression: 307.2 / 8 = 38.4 GB
-- With 32x compression: 307.2 / 32 = 9.6 GB
-```
-
-### Instance Memory Requirement Estimation
-
-```
-Required Memory (GB) = Index Size + JVM Heap + System Overhead
-
-JVM Heap = Index Size × 0.5 (recommended)
-System Overhead = 2-4 GB
-
-Example (10M vectors, 1024 dimensions, 8x compression):
-- Index size: 5 GB
-- JVM Heap: 2.5 GB
-- System overhead: 3 GB
-- Total requirement: 10.5 GB → Choose 16GB instance (r8g.xlarge)
-```
+Use `scripts/estimate_vector_resources.py` to apply these formulas consistently.
 
 ## Quantization Technique Implementation Guide
 
@@ -1558,20 +1637,15 @@ Latency requirement < 20ms?
 
 ### 3. Optimize Shard and Replica Configuration
 
-**Development Environment**:
-- Shards: 1-2
-- Replicas: 0
-- Lowest cost
+1. Calculate primary index GiB from vector and non-vector data.
+2. Divide by the selected 25-50 GiB primary-shard target.
+3. Multiply primary shards by `(replicas + 1)` to get active shards.
+4. Apply the active-shard:vCPU ratio, default 1:1.
+5. Compare the resulting CPU node floor with memory, storage, and HA floors.
 
-**Production Environment**:
-- Shards: Node count × 1.5
-- Replicas: 1
-- Balanced cost and availability
-
-**Critical Services**:
-- Shards: Node count × 2
-- Replicas: 2
-- Maximum availability
+Use 0 replicas only for disposable development environments. Start production
+evaluation with 1 replica, but keep replica count as an explicit availability
+choice rather than a hidden cost optimization.
 
 ### 4. Use Reserved Instances
 
@@ -1607,16 +1681,12 @@ Latency requirement < 20ms?
 ### Question 1: How to choose the most cost-effective instance type?
 
 **Answer**:
-1. Calculate index size (considering compression)
-2. Estimate memory requirements (index × 1.5 + 3GB)
-3. Choose the smallest instance that meets memory requirements
-4. Consider Reserved Instances to further reduce costs
-
-**Example**:
-- 10M vectors, 768 dimensions, 8x compression
-- Index size: 3.8 GB
-- Memory requirement: 3.8 × 1.5 + 3 = 8.7 GB
-- Recommendation: r8g.xlarge (16GB, $154/month)
+1. Estimate primary vector and non-vector disk footprint.
+2. Divide it by target primary shard size to get primary shards.
+3. Include replicas to get active shards and derive the vCPU floor.
+4. Calculate independent KNN-memory and storage node floors.
+5. Select the lowest-cost candidate whose node count satisfies the maximum floor.
+6. Benchmark QPS and tail latency before production.
 
 ### Question 2: Can disk mode really save 67% on costs?
 
